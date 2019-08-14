@@ -353,11 +353,46 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
      }
 }
 
+static Eina_Stringshare *
+_device_id_get(const char *device)
+{
+   char *path = strdup(device);
+   char buf[1024];
+   while (*path)
+     {
+        char vendor[4], product[4], *slash;
+        *vendor = '\0';
+        *product = '\0';
+        sprintf(buf, "%s/idVendor", path);
+        if (access(buf, R_OK) == 0)
+          {
+             FILE* fp = fopen(buf, "r");
+             fread(vendor, 1, sizeof(vendor), fp);
+             fclose(fp);
+          }
+        sprintf(buf, "%s/idProduct", path);
+        if (access(buf, R_OK) == 0)
+          {
+             FILE* fp = fopen(buf, "r");
+             fread(product, 1, sizeof(product), fp);
+             fclose(fp);
+          }
+        if (*vendor && *product)
+          {
+             return eina_stringshare_printf("%.4s:%.4s", vendor, product);
+          }
+        slash = strrchr(path, '/');
+        if (slash) *slash = '\0';
+     }
+   return NULL;
+}
+
 static void
 _udev_added_cb(const char *device, Eeze_Udev_Event  event EINA_UNUSED,
              void *data EINA_UNUSED, Eeze_Udev_Watch *watch EINA_UNUSED)
 {
-   printf("Device added %s\n", device);
+   PRINT("Device added %s\n", device);
+   PRINT("ID: %s\n", _device_id_get(device));
 }
 
 static E_Gadcon_Client *
