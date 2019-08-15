@@ -14,6 +14,7 @@
 #include <Eina.h>
 #include <Ecore.h>
 #include <Ecore_Con.h>
+#include <Eeze.h>
 
 #include "e_mod_main.h"
 
@@ -421,7 +422,7 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    evas_object_event_callback_add(inst->o_icon, EVAS_CALLBACK_MOUSE_DOWN,
 				  _button_cb_mouse_down, inst);
 
-   eeze_udev_watch_add(EEZE_UDEV_TYPE_DRIVE_REMOVABLE, EEZE_UDEV_EVENT_ADD, _udev_added_cb, NULL);
+   eeze_udev_watch_add(EEZE_UDEV_TYPE_NONE, EEZE_UDEV_EVENT_ADD, _udev_added_cb, NULL);
 
    return gcc;
 }
