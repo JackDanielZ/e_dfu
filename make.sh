@@ -1,5 +1,5 @@
 # Module
-gcc -fPIC -g -c src/e_mod_main.c $CFLAGS `pkg-config --cflags enlightenment elementary` -o src/e_mod_main.o
+gcc -fPIC -g -c src/e_mod_main.c $CFLAGS `pkg-config --cflags enlightenment elementary eeze` -o src/e_mod_main.o
 [ $? -eq 0 ] || exit 1
 gcc -shared -fPIC -DPIC src/e_mod_main.o `pkg-config --libs enlightenment elementary eeze` -Wl,-soname -Wl,module.so -o src/module.so
 [ $? -eq 0 ] || exit 1
@@ -15,7 +15,7 @@ release=$(pkg-config --variable=release enlightenment)
 host_cpu=$(uname -m)
 MODULE_ARCH="linux-gnu-$host_cpu-$release"
 
-sudo /usr/bin/mkdir -p '/opt/e/lib/enlightenment/modules/dfu/'$MODULE_ARCH
-sudo /usr/bin/install -c src/module.so $prefix/lib/enlightenment/modules/dfu/$MODULE_ARCH/module.so
-sudo /usr/bin/install -c module.desktop $prefix/lib/enlightenment/modules/dfu/module.desktop
-sudo /usr/bin/install -c -m 644 e-module-dfu.edj dfu.edj $prefix/lib/enlightenment/modules/dfu
+sudo /usr/bin/mkdir -p $prefix'/lib/enlightenment/modules/e_dfu/'$MODULE_ARCH
+sudo /usr/bin/install -c src/module.so $prefix/lib/enlightenment/modules/e_dfu/$MODULE_ARCH/module.so
+sudo /usr/bin/install -c module.desktop $prefix/lib/enlightenment/modules/e_dfu/module.desktop
+sudo /usr/bin/install -c -m 644 e-module-dfu.edj dfu.edj $prefix/lib/enlightenment/modules/e_dfu
