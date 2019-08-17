@@ -34,21 +34,9 @@ typedef struct
    int fd;
 } Instance;
 
-#define PRINT(fmt, ...) \
-{ \
-   char pbuf[1000]; \
-   sprintf(pbuf, fmt"\n", ## __VA_ARGS__); \
-   syslog(LOG_NOTICE, pbuf); \
-}
+#define PRINT printf
 
 static E_Module *_module = NULL;
-
-#define check_ret(ret) do{\
-     if (ret < 0) {\
-          PRINT("Error at %s:%d", __func__, __LINE__);\
-          return EINA_FALSE; \
-     }\
-} while(0)
 
 typedef struct
 {
@@ -63,9 +51,172 @@ typedef struct
    char *cur_state;
 } Item_Desc;
 
+typedef struct
+{
+   Eina_Stringshare *name;
+   Eina_Stringshare *command;
+} Image_Info;
+
+typedef struct
+{
+   Eina_Stringshare *id;
+   Eina_Stringshare *default_image;
+   Eina_List *images; /* List of Image_Info */
+} Device_Info;
+
+typedef struct
+{
+   Eina_List *devices; /* List of Device_Info */
+} Config;
+
+static Config *_config = NULL;
+static Eet_Data_Descriptor *_config_edd = NULL;
+
 static void _start_stop_bt_clicked(void *data, Evas_Object *obj, void *event_info);
 
-#define WSKIP while (*idesc->cur_filedata == ' ') idesc->cur_filedata++;
+static void
+_config_eet_load()
+{
+   Eet_Data_Descriptor *device_edd, *image_edd;
+   if (_config_edd) return;
+   Eet_Data_Descriptor_Class eddc;
+
+   EET_EINA_STREAM_DATA_DESCRIPTOR_CLASS_SET(&eddc, Image_Info);
+   image_edd = eet_data_descriptor_stream_new(&eddc);
+   EET_DATA_DESCRIPTOR_ADD_BASIC(image_edd, Image_Info, "name", name, EET_T_STRING);
+   EET_DATA_DESCRIPTOR_ADD_BASIC(image_edd, Image_Info, "command", command, EET_T_STRING);
+
+   EET_EINA_STREAM_DATA_DESCRIPTOR_CLASS_SET(&eddc, Device_Info);
+   device_edd = eet_data_descriptor_stream_new(&eddc);
+   EET_DATA_DESCRIPTOR_ADD_BASIC(device_edd, Device_Info, "id", id, EET_T_STRING);
+   EET_DATA_DESCRIPTOR_ADD_BASIC(device_edd, Device_Info, "default_image", default_image, EET_T_STRING);
+   EET_DATA_DESCRIPTOR_ADD_LIST(device_edd, Device_Info, "images", images, image_edd);
+
+   EET_EINA_STREAM_DATA_DESCRIPTOR_CLASS_SET(&eddc, Config);
+   _config_edd = eet_data_descriptor_stream_new(&eddc);
+   EET_DATA_DESCRIPTOR_ADD_LIST(_config_edd, Config, "devices", devices, device_edd);
+}
+
+static void
+_config_save()
+{
+   char path[1024];
+   sprintf(path, "%s/e_dfu/config", efreet_config_home_get());
+   _config_eet_load();
+   Eet_File *file = eet_open(path, EET_FILE_MODE_WRITE);
+   eet_data_write(file, _config_edd, _EET_ENTRY, _config, EINA_TRUE);
+   eet_close(file);
+}
+
+static Eina_Bool
+_mkdir(const char *dir)
+{
+   if (!ecore_file_exists(dir))
+     {
+        Eina_Bool success = ecore_file_mkdir(dir);
+        if (!success)
+          {
+             PRINT("Cannot create a config folder \"%s\"\n", dir);
+             return EINA_FALSE;
+          }
+     }
+   return EINA_TRUE;
+}
+
+static void
+_config_init()
+{
+   char path[1024];
+
+   sprintf(path, "%s/e_dfu", efreet_config_home_get());
+   if (!_mkdir(path)) return;
+
+   _config_eet_load();
+   sprintf(path, "%s/e_dfu/config", efreet_config_home_get());
+   Eet_File *file = eet_open(path, EET_FILE_MODE_READ);
+   if (!file)
+     {
+        PRINT("DFU new config\n");
+        Device_Info *dev = calloc(1, sizeof(*dev));
+        Image_Info *img = calloc(1, sizeof(*img));
+        img->name = eina_stringshare_add("target");
+        img->command = eina_stringshare_add("echo \"Target launched\"");
+        dev->id = eina_stringshare_add("1234:5678");
+        dev->default_image = eina_stringshare_add("target");
+        dev->images = eina_list_append(dev->images, img);
+        _config = calloc(1, sizeof(Config));
+        _config->devices = eina_list_append(_config->devices, dev);
+        _config_save();
+     }
+   else
+     {
+        _config = eet_data_read(file, _config_edd, _EET_ENTRY);
+        eet_close(file);
+     }
+}
+
+static void
+_config_shutdown()
+{
+   Device_Info *dev;
+   EINA_LIST_FREE(_config->devices, dev)
+     {
+        Image_Info *img;
+        eina_stringshare_del(dev->id);
+        eina_stringshare_del(dev->default_image);
+        EINA_LIST_FREE(dev->images, img)
+          {
+             eina_stringshare_del(img->name);
+             eina_stringshare_del(img->command);
+             free(img);
+          }
+        free(dev);
+     }
+   free(_config);
+   _config = NULL;
+}
+
+static Eina_Stringshare *
+_device_id_get(const char *device)
+{
+   char *path = strdup(device);
+   char buf[1024];
+   while (*path)
+     {
+        char vendor[4], product[4], *slash;
+        *vendor = '\0';
+        *product = '\0';
+        sprintf(buf, "%s/idVendor", path);
+        if (access(buf, R_OK) == 0)
+          {
+             FILE* fp = fopen(buf, "r");
+             fread(vendor, 1, sizeof(vendor), fp);
+             fclose(fp);
+          }
+        sprintf(buf, "%s/idProduct", path);
+        if (access(buf, R_OK) == 0)
+          {
+             FILE* fp = fopen(buf, "r");
+             fread(product, 1, sizeof(product), fp);
+             fclose(fp);
+          }
+        if (*vendor && *product)
+          {
+             return eina_stringshare_printf("%.4s:%.4s", vendor, product);
+          }
+        slash = strrchr(path, '/');
+        if (slash) *slash = '\0';
+     }
+   return NULL;
+}
+
+static void
+_udev_added_cb(const char *device, Eeze_Udev_Event  event EINA_UNUSED,
+             void *data EINA_UNUSED, Eeze_Udev_Watch *watch EINA_UNUSED)
+{
+   PRINT("Device added %s\n", device);
+   PRINT("ID: %s\n", _device_id_get(device));
+}
 
 #if 0
 static Eo *
@@ -213,65 +364,13 @@ _box_update(Instance *inst, Eina_Bool clear)
 }
 
 static void
-_config_dir_changed(void *data,
+_config_dir_changed(void *data EINA_UNUSED,
       Ecore_File_Monitor *em EINA_UNUSED,
       Ecore_File_Event event EINA_UNUSED, const char *_path EINA_UNUSED)
 {
-   Instance *inst = data;
-   Eina_List *items = inst->items;
-   Eina_List *l = ecore_file_ls(inst->cfg_path);
-   char *file;
-   Item_Desc *idesc;
-   inst->items = NULL;
-   EINA_LIST_FREE(l, file)
-     {
-        if (eina_str_has_suffix(file, ".seq"))
-          {
-             Eina_List *itr, *itr2;
-             Eina_Bool found = EINA_FALSE;
-             EINA_LIST_FOREACH_SAFE(items, itr, itr2, idesc)
-               {
-                  if (!found && !strncmp(file, idesc->name, strlen(file) - 4))
-                    {
-                       found = EINA_TRUE;
-                       items = eina_list_remove(items, idesc);
-                       inst->items = eina_list_append(inst->items, idesc);
-                    }
-               }
-             if (!found)
-               {
-                  char path[1024];
-                  sprintf(path, "%s/%s", inst->cfg_path, file);
-                  idesc = calloc(1, sizeof(*idesc));
-                  idesc->instance = inst;
-                  idesc->filename = eina_stringshare_add(path);
-                  idesc->name = eina_stringshare_add_length(file, strlen(file) - 4);
-                  inst->items = eina_list_append(inst->items, idesc);
-               }
-          }
-        free(file);
-     }
-   _box_update(inst, EINA_TRUE);
-   EINA_LIST_FREE(items, idesc)
-     {
-        eina_stringshare_del(idesc->filename);
-        free(idesc);
-     }
-}
-
-static Eina_Bool
-_mkdir(const char *dir)
-{
-   if (!ecore_file_exists(dir))
-     {
-        Eina_Bool success = ecore_file_mkdir(dir);
-        if (!success)
-          {
-             PRINT("Cannot create a config folder \"%s\"", dir);
-             return EINA_FALSE;
-          }
-     }
-   return EINA_TRUE;
+   PRINT("e_dfu: config updated\n");
+   _config_shutdown();
+   _config_init();
 }
 
 static Instance *
@@ -354,48 +453,6 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
      }
 }
 
-static Eina_Stringshare *
-_device_id_get(const char *device)
-{
-   char *path = strdup(device);
-   char buf[1024];
-   while (*path)
-     {
-        char vendor[4], product[4], *slash;
-        *vendor = '\0';
-        *product = '\0';
-        sprintf(buf, "%s/idVendor", path);
-        if (access(buf, R_OK) == 0)
-          {
-             FILE* fp = fopen(buf, "r");
-             fread(vendor, 1, sizeof(vendor), fp);
-             fclose(fp);
-          }
-        sprintf(buf, "%s/idProduct", path);
-        if (access(buf, R_OK) == 0)
-          {
-             FILE* fp = fopen(buf, "r");
-             fread(product, 1, sizeof(product), fp);
-             fclose(fp);
-          }
-        if (*vendor && *product)
-          {
-             return eina_stringshare_printf("%.4s:%.4s", vendor, product);
-          }
-        slash = strrchr(path, '/');
-        if (slash) *slash = '\0';
-     }
-   return NULL;
-}
-
-static void
-_udev_added_cb(const char *device, Eeze_Udev_Event  event EINA_UNUSED,
-             void *data EINA_UNUSED, Eeze_Udev_Watch *watch EINA_UNUSED)
-{
-   PRINT("Device added %s\n", device);
-   PRINT("ID: %s\n", _device_id_get(device));
-}
-
 static E_Gadcon_Client *
 _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 {
@@ -403,6 +460,7 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    E_Gadcon_Client *gcc;
    char buf[4096];
 
+   _config_init();
    inst = _instance_create();
 
    snprintf(buf, sizeof(buf), "%s/dfu.edj", e_module_dir_get(_module));
@@ -418,7 +476,6 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    gcc->data = inst;
    inst->gcc = gcc;
 
-   _config_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
    evas_object_event_callback_add(inst->o_icon, EVAS_CALLBACK_MOUSE_DOWN,
 				  _button_cb_mouse_down, inst);
 
@@ -431,6 +488,7 @@ static void
 _gc_shutdown(E_Gadcon_Client *gcc)
 {
    _instance_delete(gcc->data);
+   _config_shutdown();
 }
 
 static void
