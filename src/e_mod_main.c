@@ -30,26 +30,11 @@ typedef struct
    Eina_List *items;
    Ecore_File_Monitor *config_dir_monitor;
    Eina_Stringshare *cfg_path;
-
-   int fd;
 } Instance;
 
 #define PRINT printf
 
 static E_Module *_module = NULL;
-
-typedef struct
-{
-   Instance *instance;
-   Ecore_Timer *timer;
-   Eina_Stringshare *filename;
-   Eina_Stringshare *name;
-   Eo *start_button;
-   Eina_Bool playing;
-   char *filedata;
-   char *cur_filedata;
-   char *cur_state;
-} Item_Desc;
 
 typedef struct
 {
@@ -71,8 +56,6 @@ typedef struct
 
 static Config *_config = NULL;
 static Eet_Data_Descriptor *_config_edd = NULL;
-
-static void _start_stop_bt_clicked(void *data, Evas_Object *obj, void *event_info);
 
 static void
 _config_eet_load()
@@ -218,7 +201,6 @@ _udev_added_cb(const char *device, Eeze_Udev_Event  event EINA_UNUSED,
    PRINT("ID: %s\n", _device_id_get(device));
 }
 
-#if 0
 static Eo *
 _label_create(Eo *parent, const char *text, Eo **wref)
 {
@@ -226,15 +208,14 @@ _label_create(Eo *parent, const char *text, Eo **wref)
    if (!label)
      {
         label = elm_label_add(parent);
-        evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
-        evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+        evas_object_size_hint_align_set(label, EVAS_HINT_FILL, EVAS_HINT_FILL);
+        evas_object_size_hint_weight_set(label, 0.0, 0.0);
         evas_object_show(label);
         if (wref) efl_wref_add(label, wref);
      }
    elm_object_text_set(label, text);
    return label;
 }
-#endif
 
 static Eo *
 _button_create(Eo *parent, const char *text, Eo *icon, Eo **wref, Evas_Smart_Cb cb_func, void *cb_data)
@@ -254,112 +235,71 @@ _button_create(Eo *parent, const char *text, Eo *icon, Eo **wref, Evas_Smart_Cb 
    return bt;
 }
 
-static Eo *
-_icon_create(Eo *parent, const char *path, Eo **wref)
+static void
+_image_selected(void *data, Evas_Object *bt, void *event_info EINA_UNUSED)
 {
-   Eo *ic = wref ? *wref : NULL;
-   if (!ic)
-     {
-        ic = elm_icon_add(parent);
-        elm_icon_standard_set(ic, path);
-        evas_object_show(ic);
-        if (wref) efl_wref_add(ic, wref);
-     }
-   return ic;
-}
-
-static char *
-_file_get_as_string(const char *filename)
-{
-   char *file_data = NULL;
-   int file_size;
-   FILE *fp = fopen(filename, "rb");
-   if (!fp)
-     {
-        PRINT("Can not open file: \"%s\".", filename);
-        return NULL;
-     }
-
-   fseek(fp, 0, SEEK_END);
-   file_size = ftell(fp);
-   if (file_size == -1)
-     {
-        fclose(fp);
-        PRINT("Can not ftell file: \"%s\".", filename);
-        return NULL;
-     }
-   rewind(fp);
-   file_data = (char *) calloc(1, file_size + 1);
-   if (!file_data)
-     {
-        fclose(fp);
-        PRINT("Calloc failed");
-        return NULL;
-     }
-   int res = fread(file_data, file_size, 1, fp);
-   fclose(fp);
-   if (!res)
-     {
-        free(file_data);
-        file_data = NULL;
-        PRINT("fread failed");
-     }
-   return file_data;
+   Device_Info *dev = data;
+   Eo *hv = efl_key_data_get(bt, "hover");
+   eina_stringshare_del(dev->default_image);
+   dev->default_image = eina_stringshare_add(elm_object_text_get(bt));
+   _config_save();
+   efl_del(hv);
 }
 
 static void
-_start_stop_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
+_images_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
 {
    Eina_List *itr;
-   Item_Desc *idesc = data, *idesc2;
-   idesc->playing = !idesc->playing;
-   elm_object_part_content_set(idesc->start_button, "icon",
-      _icon_create(idesc->start_button,
-         idesc->playing ? "media-playback-stop" : "media-playback-start", NULL));
-   if (idesc->playing)
+   Image_Info *img;
+   Device_Info *dev = data;
+   Instance *inst = efl_key_data_get(obj, "Instance");
+
+   Eo *hv = elm_hover_add(inst->main_box);
+   evas_object_layer_set(hv, E_LAYER_MENU);
+   elm_hover_parent_set(hv, inst->main_box);
+   elm_hover_target_set(hv, obj);
+   efl_gfx_entity_visible_set(hv, EINA_TRUE);
+   Eo *bx = elm_box_add(hv);
+   elm_box_homogeneous_set(bx, EINA_TRUE);
+   EINA_LIST_FOREACH(dev->images, itr, img)
      {
-        idesc->filedata = _file_get_as_string(idesc->filename);
-        idesc->cur_filedata = idesc->filedata;
-        idesc->cur_state = NULL;
-        PRINT("Beginning consuming %s", idesc->filename);
+        Eo *bt = elm_button_add(bx);
+        efl_key_data_set(bt, "hover", hv);
+        elm_object_text_set(bt, img->name);
+        evas_object_size_hint_weight_set(bt, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+        evas_object_size_hint_align_set(bt, EVAS_HINT_FILL, EVAS_HINT_FILL);
+        evas_object_smart_callback_add(bt, "clicked", _image_selected, dev);
+        elm_box_pack_end(bx, bt);
+        evas_object_show(bt);
      }
-   else
-     {
-        free(idesc->filedata);
-        idesc->filedata = idesc->cur_filedata = NULL;
-        ecore_timer_del(idesc->timer);
-        idesc->timer = NULL;
-     }
-   EINA_LIST_FOREACH(idesc->instance->items, itr, idesc2)
-     {
-        if (idesc2 != idesc)
-           elm_object_disabled_set(idesc2->start_button, idesc->playing);
-     }
+   evas_object_show(bx);
+   elm_object_part_content_set(hv, "top", bx);
 }
 
 static void
 _box_update(Instance *inst, Eina_Bool clear)
 {
    Eina_List *itr;
-   Item_Desc *idesc;
+   Device_Info *dev;
 
    if (!inst->main_box) return;
 
    if (clear) elm_box_clear(inst->main_box);
 
-   EINA_LIST_FOREACH(inst->items, itr, idesc)
+   EINA_LIST_FOREACH(_config->devices, itr, dev)
      {
-        Eo *b = elm_box_add(inst->main_box);
+        Eo *b = elm_box_add(inst->main_box), *o;
         elm_box_horizontal_set(b, EINA_TRUE);
         evas_object_size_hint_align_set(b, EVAS_HINT_FILL, EVAS_HINT_FILL);
-        evas_object_size_hint_weight_set(b, EVAS_HINT_EXPAND, 0.0);
+        evas_object_size_hint_weight_set(b, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
         evas_object_show(b);
         elm_box_pack_end(inst->main_box, b);
 
-        _button_create(b, idesc->name, NULL,
-              &idesc->start_button, _start_stop_bt_clicked, idesc);
-        evas_object_size_hint_weight_set(idesc->start_button, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-        elm_box_pack_end(b, idesc->start_button);
+        elm_box_pack_end(b, _label_create(b, dev->id, NULL));
+
+        o = _button_create(b, dev->default_image, NULL, NULL, _images_bt_clicked, dev);
+        efl_key_data_set(o, "Instance", inst);
+        elm_box_pack_end(b, o);
      }
 }
 
@@ -384,10 +324,6 @@ _instance_create()
    inst->cfg_path = eina_stringshare_add(path);
    inst->config_dir_monitor = ecore_file_monitor_add(path, _config_dir_changed, inst);
 
-     {
-//        free(inst);
-//        inst = NULL;
-     }
    return inst;
 }
 
