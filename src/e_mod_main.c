@@ -44,6 +44,7 @@ typedef struct
 
 typedef struct
 {
+   Eina_Stringshare *name;
    Eina_Stringshare *id;
    Eina_Stringshare *default_image;
    Eina_List *images; /* List of Image_Info */
@@ -71,6 +72,7 @@ _config_eet_load()
 
    EET_EINA_STREAM_DATA_DESCRIPTOR_CLASS_SET(&eddc, Device_Info);
    device_edd = eet_data_descriptor_stream_new(&eddc);
+   EET_DATA_DESCRIPTOR_ADD_BASIC(device_edd, Device_Info, "name", name, EET_T_STRING);
    EET_DATA_DESCRIPTOR_ADD_BASIC(device_edd, Device_Info, "id", id, EET_T_STRING);
    EET_DATA_DESCRIPTOR_ADD_BASIC(device_edd, Device_Info, "default_image", default_image, EET_T_STRING);
    EET_DATA_DESCRIPTOR_ADD_LIST(device_edd, Device_Info, "images", images, image_edd);
@@ -124,6 +126,8 @@ _config_init()
         Image_Info *img = calloc(1, sizeof(*img));
         img->name = eina_stringshare_add("target");
         img->command = eina_stringshare_add("echo \"Target launched\"");
+
+        dev->name = eina_stringshare_add("Example");
         dev->id = eina_stringshare_add("1234:5678");
         dev->default_image = eina_stringshare_add("target");
         dev->images = eina_list_append(dev->images, img);
@@ -145,6 +149,7 @@ _config_shutdown()
    EINA_LIST_FREE(_config->devices, dev)
      {
         Image_Info *img;
+        eina_stringshare_del(dev->name);
         eina_stringshare_del(dev->id);
         eina_stringshare_del(dev->default_image);
         EINA_LIST_FREE(dev->images, img)
@@ -288,6 +293,7 @@ _box_update(Instance *inst, Eina_Bool clear)
 
    EINA_LIST_FOREACH(_config->devices, itr, dev)
      {
+        char lb_text[256];
         Eo *b = elm_box_add(inst->main_box), *o;
         elm_box_horizontal_set(b, EINA_TRUE);
         evas_object_size_hint_align_set(b, EVAS_HINT_FILL, EVAS_HINT_FILL);
@@ -295,7 +301,8 @@ _box_update(Instance *inst, Eina_Bool clear)
         evas_object_show(b);
         elm_box_pack_end(inst->main_box, b);
 
-        elm_box_pack_end(b, _label_create(b, dev->id, NULL));
+        sprintf(lb_text, "%s (%s) ", dev->name, dev->id);
+        elm_box_pack_end(b, _label_create(b, lb_text, NULL));
 
         o = _button_create(b, dev->default_image, NULL, NULL, _images_bt_clicked, dev);
         efl_key_data_set(o, "Instance", inst);
