@@ -124,13 +124,20 @@ _config_init()
         PRINT("DFU new config\n");
         Device_Info *dev = calloc(1, sizeof(*dev));
         Image_Info *img = calloc(1, sizeof(*img));
-        img->name = eina_stringshare_add("target");
-        img->command = eina_stringshare_add("echo \"Target launched\"");
+        Image_Info *img2 = calloc(1, sizeof(*img2));
 
         dev->name = eina_stringshare_add("Example");
         dev->id = eina_stringshare_add("1234:5678");
         dev->default_image = eina_stringshare_add("target");
+
+        img->name = eina_stringshare_add("target");
+        img->command = eina_stringshare_add("echo \"Target launched\"");
         dev->images = eina_list_append(dev->images, img);
+
+        img2->name = eina_stringshare_add("target2");
+        img2->command = eina_stringshare_add("echo \"Target2 launched\"");
+        dev->images = eina_list_append(dev->images, img2);
+
         _config = calloc(1, sizeof(Config));
         _config->devices = eina_list_append(_config->devices, dev);
         _config_save();
