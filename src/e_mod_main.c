@@ -253,7 +253,10 @@ _image_selected(void *data, Evas_Object *bt, void *event_info EINA_UNUSED)
    Device_Info *dev = data;
    Eo *hv = efl_key_data_get(bt, "hover");
    eina_stringshare_del(dev->default_image);
-   dev->default_image = eina_stringshare_add(elm_object_text_get(bt));
+   if (!strcmp(elm_object_text_get(bt), "Disabled"))
+      dev->default_image = NULL;
+   else
+      dev->default_image = eina_stringshare_add(elm_object_text_get(bt));
    _config_save();
    efl_del(hv);
 }
@@ -266,7 +269,7 @@ _images_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
    Device_Info *dev = data;
    Instance *inst = efl_key_data_get(obj, "Instance");
 
-   Eo *hv = elm_hover_add(inst->main_box);
+   Eo *hv = elm_hover_add(inst->main_box), *bt;
    evas_object_layer_set(hv, E_LAYER_MENU);
    elm_hover_parent_set(hv, inst->main_box);
    elm_hover_target_set(hv, obj);
@@ -275,15 +278,14 @@ _images_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
    elm_box_homogeneous_set(bx, EINA_TRUE);
    EINA_LIST_FOREACH(dev->images, itr, img)
      {
-        Eo *bt = elm_button_add(bx);
+        bt = _button_create(bx, img->name, NULL, NULL, _image_selected, dev);
         efl_key_data_set(bt, "hover", hv);
-        elm_object_text_set(bt, img->name);
-        evas_object_size_hint_weight_set(bt, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-        evas_object_size_hint_align_set(bt, EVAS_HINT_FILL, EVAS_HINT_FILL);
-        evas_object_smart_callback_add(bt, "clicked", _image_selected, dev);
         elm_box_pack_end(bx, bt);
-        evas_object_show(bt);
      }
+   bt = _button_create(bx, "Disabled", NULL, NULL, _image_selected, dev);
+   efl_key_data_set(bt, "hover", hv);
+   elm_box_pack_end(bx, bt);
+
    evas_object_show(bx);
    elm_object_part_content_set(hv, "top", bx);
 }
@@ -311,19 +313,22 @@ _box_update(Instance *inst, Eina_Bool clear)
         sprintf(lb_text, "%s (%s) ", dev->name, dev->id);
         elm_box_pack_end(b, _label_create(b, lb_text, NULL));
 
-        o = _button_create(b, dev->default_image, NULL, NULL, _images_bt_clicked, dev);
+        o = _button_create(b, dev->default_image ? dev->default_image : "Disabled",
+              NULL, NULL, _images_bt_clicked, dev);
         efl_key_data_set(o, "Instance", inst);
         elm_box_pack_end(b, o);
      }
 }
 
 static void
-_config_dir_changed(void *data EINA_UNUSED,
+_config_dir_changed(void *data,
       Ecore_File_Monitor *em EINA_UNUSED,
       Ecore_File_Event event EINA_UNUSED, const char *_path EINA_UNUSED)
 {
+   Instance *inst = data;
    PRINT("e_dfu: config updated\n");
    _config_shutdown();
+   E_FREE_FUNC(inst->popup, e_object_del);
    _config_init();
 }
 
