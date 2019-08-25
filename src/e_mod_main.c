@@ -27,12 +27,10 @@ typedef struct
    Evas_Object *o_icon;
    Eo *main_box;
 
-   Eina_List *items;
-   Ecore_File_Monitor *config_dir_monitor;
-   Eina_Stringshare *cfg_path;
+   Ecore_File_Monitor *config_file_monitor;
 } Instance;
 
-#define PRINT printf
+#define PRINT _printf
 
 static E_Module *_module = NULL;
 
@@ -57,6 +55,31 @@ typedef struct
 
 static Config *_config = NULL;
 static Eet_Data_Descriptor *_config_edd = NULL;
+
+static int
+_printf(const char *fmt, ...)
+{
+   static FILE *fp = NULL;
+   char printf_buf[1024];
+   va_list args;
+   int printed;
+
+   if (!fp)
+     {
+        char path[1024];
+        sprintf(path, "%s/e_dfu/log", efreet_config_home_get());
+        fp = fopen(path, "a");
+     }
+
+   va_start(args, fmt);
+   printed = vsprintf(printf_buf, fmt, args);
+   va_end(args);
+
+   fwrite(printf_buf, 1, strlen(printf_buf), fp);
+   fflush(fp);
+
+   return printed;
+}
 
 static void
 _config_eet_load()
@@ -321,7 +344,7 @@ _box_update(Instance *inst, Eina_Bool clear)
 }
 
 static void
-_config_dir_changed(void *data,
+_config_file_changed(void *data,
       Ecore_File_Monitor *em EINA_UNUSED,
       Ecore_File_Event event EINA_UNUSED, const char *_path EINA_UNUSED)
 {
@@ -340,8 +363,8 @@ _instance_create()
 
    sprintf(path, "%s/e_dfu", efreet_config_home_get());
    if (!_mkdir(path)) return NULL;
-   inst->cfg_path = eina_stringshare_add(path);
-   inst->config_dir_monitor = ecore_file_monitor_add(path, _config_dir_changed, inst);
+   sprintf(path, "%s/e_dfu/config", efreet_config_home_get());
+   inst->config_file_monitor = ecore_file_monitor_add(path, _config_file_changed, inst);
 
    return inst;
 }
