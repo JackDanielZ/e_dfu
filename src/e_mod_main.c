@@ -38,6 +38,8 @@ typedef struct
 {
    Eina_Stringshare *name;
    Eina_Stringshare *command;
+   Instance *inst;
+   Ecore_Exe *exe;
 } Image_Info;
 
 typedef struct
@@ -132,9 +134,12 @@ _mkdir(const char *dir)
 }
 
 static void
-_config_init()
+_config_init(Instance *inst)
 {
    char path[1024];
+   Eina_List *itr, *itr2;
+   Device_Info *dev;
+   Image_Info *img;
 
    sprintf(path, "%s/eezier", efreet_config_home_get());
    if (!_mkdir(path)) return;
@@ -145,8 +150,8 @@ _config_init()
    if (!file)
      {
         PRINT("New config\n");
-        Device_Info *dev = calloc(1, sizeof(*dev));
-        Image_Info *img = calloc(1, sizeof(*img));
+        dev = calloc(1, sizeof(*dev));
+        img = calloc(1, sizeof(*img));
         Image_Info *img2 = calloc(1, sizeof(*img2));
 
         dev->name = eina_stringshare_add("Example");
@@ -169,6 +174,13 @@ _config_init()
      {
         _config = eet_data_read(file, _config_edd, _EET_ENTRY);
         eet_close(file);
+     }
+   EINA_LIST_FOREACH(_config->devices, itr, dev)
+     {
+        EINA_LIST_FOREACH(dev->images, itr2, img)
+          {
+             img->inst = inst;
+          }
      }
 }
 
@@ -228,12 +240,82 @@ _device_id_get(const char *device)
    return NULL;
 }
 
+static Eina_Bool
+_cmd_end_cb(void *data, int type EINA_UNUSED, void *event)
+{
+   Ecore_Exe_Event_Del *event_info = (Ecore_Exe_Event_Del *)event;
+   Ecore_Exe *exe = event_info->exe;
+   Image_Info *img = ecore_exe_data_get(exe);
+   if (!img || img->inst != data) return ECORE_CALLBACK_PASS_ON;
+   PRINT("EXE END %p\n", img->exe);
+//   _tooltip_enable(d->download_button, EINA_FALSE);
+   return ECORE_CALLBACK_DONE;
+}
+
+static Eina_Bool
+_cmd_output_cb(void *data, int type EINA_UNUSED, void *event)
+{
+   Ecore_Exe_Event_Data *event_data = (Ecore_Exe_Event_Data *)event;
+   const char *begin = event_data->data;
+   Ecore_Exe *exe = event_data->exe;
+   Image_Info *img = ecore_exe_data_get(exe);
+   PRINT("EXE OUTPUT In\n");
+   if (!img || img->inst != data) return ECORE_CALLBACK_PASS_ON;
+   PRINT("EXE OUTPUT %p\n", img->exe);
+
+   while (*begin == 0xd || *begin == ' ') begin++;
+   PRINT(begin);
+   PRINT("\n");
+//   elm_object_tooltip_text_set(d->download_button, begin);
+
+   return ECORE_CALLBACK_DONE;
+}
+
 static void
-_udev_added_cb(const char *device, Eeze_Udev_Event  event EINA_UNUSED,
+_dev_cmd_invoke(Image_Info *img)
+{
+//   Instance *inst = img->inst;
+
+   if (img->exe) return;
+   img->exe = ecore_exe_pipe_run(img->command, ECORE_EXE_PIPE_READ | ECORE_EXE_PIPE_ERROR, img);
+   PRINT("EXE %p\n", img->exe);
+   efl_wref_add(img->exe, &(img->exe));
+//   elm_object_tooltip_text_set(d->download_button, "");
+//   elm_object_tooltip_show(d->download_button);
+//   _tooltip_enable(d->download_button, EINA_TRUE);
+}
+
+static void
+_udev_added_cb(const char *dev_name, Eeze_Udev_Event  event EINA_UNUSED,
              void *data EINA_UNUSED, Eeze_Udev_Watch *watch EINA_UNUSED)
 {
-   PRINT("Device added %s\n", device);
-   PRINT("ID: %s\n", _device_id_get(device));
+   Eina_List *itr;
+   Device_Info *dev;
+   Eina_Stringshare *dev_id = _device_id_get(dev_name);
+   PRINT("Device added %s\n", dev_name);
+   PRINT("ID: %s\n", dev_id);
+   if (!dev_id) return;
+   EINA_LIST_FOREACH(_config->devices, itr, dev)
+     {
+        if (!strcmp(dev->id, dev_id))
+          {
+             Image_Info *img;
+             PRINT("DEV FOUND: target to launch %s\n", dev->default_image);
+             if (!dev->default_image) goto end;
+             EINA_LIST_FOREACH(dev->images, itr, img)
+               {
+                  if (!strcmp(img->name, dev->default_image))
+                    {
+                       PRINT("IMG FOUND: %s\n", img->name);
+                       _dev_cmd_invoke(img);
+                       goto end;
+                    }
+               }
+             goto end;
+          }
+     }
+end:
+   eina_stringshare_del(dev_id);
 }
 
 static Eo *
@@ -353,7 +435,7 @@ _config_file_changed(void *data,
    PRINT("Config updated\n");
    _config_shutdown();
    E_FREE_FUNC(inst->popup, e_object_del);
-   _config_init();
+   _config_init(inst);
 }
 
 static Instance *
@@ -439,8 +521,8 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    E_Gadcon_Client *gcc;
    char buf[4096];
 
-   _config_init();
    inst = _instance_create();
+   _config_init(inst);
 
    snprintf(buf, sizeof(buf), "%s/eezier.edj", e_module_dir_get(_module));
 
@@ -459,6 +541,10 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 				  _button_cb_mouse_down, inst);
 
    eeze_udev_watch_add(EEZE_UDEV_TYPE_NONE, EEZE_UDEV_EVENT_ADD, _udev_added_cb, NULL);
+
+   ecore_event_handler_add(ECORE_EXE_EVENT_DATA, _cmd_output_cb, inst);
+   ecore_event_handler_add(ECORE_EXE_EVENT_ERROR, _cmd_output_cb, inst);
+   ecore_event_handler_add(ECORE_EXE_EVENT_DEL, _cmd_end_cb, inst);
 
    return gcc;
 }
