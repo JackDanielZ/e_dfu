@@ -67,7 +67,7 @@ _printf(const char *fmt, ...)
    if (!fp)
      {
         char path[1024];
-        sprintf(path, "%s/e_dfu/log", efreet_config_home_get());
+        sprintf(path, "%s/eezier/log", efreet_config_home_get());
         fp = fopen(path, "a");
      }
 
@@ -109,7 +109,7 @@ static void
 _config_save()
 {
    char path[1024];
-   sprintf(path, "%s/e_dfu/config", efreet_config_home_get());
+   sprintf(path, "%s/eezier/config", efreet_config_home_get());
    _config_eet_load();
    Eet_File *file = eet_open(path, EET_FILE_MODE_WRITE);
    eet_data_write(file, _config_edd, _EET_ENTRY, _config, EINA_TRUE);
@@ -136,15 +136,15 @@ _config_init()
 {
    char path[1024];
 
-   sprintf(path, "%s/e_dfu", efreet_config_home_get());
+   sprintf(path, "%s/eezier", efreet_config_home_get());
    if (!_mkdir(path)) return;
 
    _config_eet_load();
-   sprintf(path, "%s/e_dfu/config", efreet_config_home_get());
+   sprintf(path, "%s/eezier/config", efreet_config_home_get());
    Eet_File *file = eet_open(path, EET_FILE_MODE_READ);
    if (!file)
      {
-        PRINT("DFU new config\n");
+        PRINT("New config\n");
         Device_Info *dev = calloc(1, sizeof(*dev));
         Image_Info *img = calloc(1, sizeof(*img));
         Image_Info *img2 = calloc(1, sizeof(*img2));
@@ -362,9 +362,9 @@ _instance_create()
    char path[1024];
    Instance *inst = calloc(1, sizeof(Instance));
 
-   sprintf(path, "%s/e_dfu", efreet_config_home_get());
+   sprintf(path, "%s/eezier", efreet_config_home_get());
    if (!_mkdir(path)) return NULL;
-   sprintf(path, "%s/e_dfu/config", efreet_config_home_get());
+   sprintf(path, "%s/eezier/config", efreet_config_home_get());
    inst->config_file_monitor = ecore_file_monitor_add(path, _config_file_changed, inst);
 
    return inst;
@@ -442,13 +442,13 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    _config_init();
    inst = _instance_create();
 
-   snprintf(buf, sizeof(buf), "%s/dfu.edj", e_module_dir_get(_module));
+   snprintf(buf, sizeof(buf), "%s/eezier.edj", e_module_dir_get(_module));
 
    inst->o_icon = edje_object_add(gc->evas);
    if (!e_theme_edje_object_set(inst->o_icon,
-				"base/theme/modules/dfu",
-                                "modules/dfu/main"))
-      edje_object_file_set(inst->o_icon, buf, "modules/dfu/main");
+				"base/theme/modules/eezier",
+                                "modules/eezier/main"))
+      edje_object_file_set(inst->o_icon, buf, "modules/eezier/main");
    evas_object_show(inst->o_icon);
 
    gcc = e_gadcon_client_new(gc, name, id, style, inst->o_icon);
@@ -480,7 +480,7 @@ _gc_orient(E_Gadcon_Client *gcc, E_Gadcon_Orient orient EINA_UNUSED)
 static const char *
 _gc_label(const E_Gadcon_Client_Class *client_class EINA_UNUSED)
 {
-   return "DFU";
+   return "eezier";
 }
 
 static Evas_Object *
@@ -491,7 +491,7 @@ _gc_icon(const E_Gadcon_Client_Class *client_class EINA_UNUSED, Evas *evas)
 
    if (!_module) return NULL;
 
-   snprintf(buf, sizeof(buf), "%s/e-module-dfu.edj", e_module_dir_get(_module));
+   snprintf(buf, sizeof(buf), "%s/e-module-eezier.edj", e_module_dir_get(_module));
 
    o = edje_object_add(evas);
    edje_object_file_set(o, buf, "icon");
@@ -509,12 +509,12 @@ _gc_id_new(const E_Gadcon_Client_Class *client_class)
 
 EAPI E_Module_Api e_modapi =
 {
-   E_MODULE_API_VERSION, "DFU"
+   E_MODULE_API_VERSION, "eezier"
 };
 
 static const E_Gadcon_Client_Class _gc_class =
 {
-   GADCON_CLIENT_CLASS_VERSION, "dfu",
+   GADCON_CLIENT_CLASS_VERSION, "eezier",
    {
       _gc_init, _gc_shutdown, _gc_orient, _gc_label, _gc_icon, _gc_id_new, NULL, NULL
    },

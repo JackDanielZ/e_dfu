@@ -1,7 +1,7 @@
 [Desktop Entry]
 Encoding=UTF-8
 Type=Link
-Name=DFU
-Comment=DFU module
-Icon=e-module-dfu
+Name=Eezier
+Comment=Eezier module
+Icon=e-module-eezier
 X-Enlightenment-ModuleType=system
