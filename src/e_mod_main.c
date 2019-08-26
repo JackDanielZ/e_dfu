@@ -350,7 +350,7 @@ _config_file_changed(void *data,
 {
    Instance *inst = data;
    if (event != ECORE_FILE_EVENT_MODIFIED) return;
-   PRINT("e_dfu: config updated\n");
+   PRINT("Config updated\n");
    _config_shutdown();
    E_FREE_FUNC(inst->popup, e_object_del);
    _config_init();
