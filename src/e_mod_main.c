@@ -346,9 +346,10 @@ _box_update(Instance *inst, Eina_Bool clear)
 static void
 _config_file_changed(void *data,
       Ecore_File_Monitor *em EINA_UNUSED,
-      Ecore_File_Event event EINA_UNUSED, const char *_path EINA_UNUSED)
+      Ecore_File_Event event, const char *_path EINA_UNUSED)
 {
    Instance *inst = data;
+   if (event != ECORE_FILE_EVENT_MODIFIED) return;
    PRINT("e_dfu: config updated\n");
    _config_shutdown();
    E_FREE_FUNC(inst->popup, e_object_del);
