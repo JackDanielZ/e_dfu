@@ -1,0 +1,10 @@
+Move menu to right mouse button
+When device added and command invoked:
+- Open popup
+- Set as transparent - how ?
+- Create a text object
+- Append stdout text in green and error text in red
+- On exit:
+  - code is 0, hide the popup
+  - code is !0, append in red (big font) "ERROR $?" - don't hide
+- Check animations to hide and show if possible
