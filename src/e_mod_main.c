@@ -319,6 +319,20 @@ end:
 }
 
 static Eo *
+_icon_create(Eo *parent, const char *path, Eo **wref)
+{
+   Eo *ic = wref ? *wref : NULL;
+   if (!ic)
+     {
+        ic = elm_icon_add(parent);
+        elm_icon_standard_set(ic, path);
+        evas_object_show(ic);
+        if (wref) efl_wref_add(ic, wref);
+     }
+   return ic;
+}
+
+static Eo *
 _label_create(Eo *parent, const char *text, Eo **wref)
 {
    Eo *label = wref ? *wref : NULL;
@@ -524,14 +538,9 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    inst = _instance_create();
    _config_init(inst);
 
-   snprintf(buf, sizeof(buf), "%s/eezier.edj", e_module_dir_get(_module));
+   snprintf(buf, sizeof(buf), "%s/icon.png", e_module_dir_get(_module));
 
-   inst->o_icon = edje_object_add(gc->evas);
-   if (!e_theme_edje_object_set(inst->o_icon,
-				"base/theme/modules/eezier",
-                                "modules/eezier/main"))
-      edje_object_file_set(inst->o_icon, buf, "modules/eezier/main");
-   evas_object_show(inst->o_icon);
+   inst->o_icon = _icon_create(gc->evas, buf, NULL);
 
    gcc = e_gadcon_client_new(gc, name, id, style, inst->o_icon);
    gcc->data = inst;
@@ -572,16 +581,13 @@ _gc_label(const E_Gadcon_Client_Class *client_class EINA_UNUSED)
 static Evas_Object *
 _gc_icon(const E_Gadcon_Client_Class *client_class EINA_UNUSED, Evas *evas)
 {
-   Evas_Object *o;
    char buf[4096];
 
    if (!_module) return NULL;
 
-   snprintf(buf, sizeof(buf), "%s/e-module-eezier.edj", e_module_dir_get(_module));
+   snprintf(buf, sizeof(buf), "%s/icon.png", e_module_dir_get(_module));
 
-   o = edje_object_add(evas);
-   edje_object_file_set(o, buf, "icon");
-   return o;
+   return _icon_create(evas, buf, NULL);
 }
 
 static const char *
