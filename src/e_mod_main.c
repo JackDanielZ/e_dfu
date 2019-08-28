@@ -332,6 +332,7 @@ _icon_create(Eo *parent, const char *path, Eo **wref)
    return ic;
 }
 
+#if 0
 static Eo *
 _label_create(Eo *parent, const char *text, Eo **wref)
 {
@@ -365,78 +366,18 @@ _button_create(Eo *parent, const char *text, Eo *icon, Eo **wref, Evas_Smart_Cb 
    elm_object_part_content_set(bt, "icon", icon);
    return bt;
 }
+#endif
 
 static void
-_image_selected(void *data, Evas_Object *bt, void *event_info EINA_UNUSED)
+_image_selected(void *data, E_Menu *menu EINA_UNUSED, E_Menu_Item *mi)
 {
    Device_Info *dev = data;
-   Eo *hv = efl_key_data_get(bt, "hover");
    eina_stringshare_del(dev->default_image);
-   if (!strcmp(elm_object_text_get(bt), "Disabled"))
+   if (!strcmp(mi->label, "Disabled"))
       dev->default_image = NULL;
    else
-      dev->default_image = eina_stringshare_add(elm_object_text_get(bt));
+      dev->default_image = eina_stringshare_add(mi->label);
    _config_save();
-   efl_del(hv);
-}
-
-static void
-_images_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
-{
-   Eina_List *itr;
-   Image_Info *img;
-   Device_Info *dev = data;
-   Instance *inst = efl_key_data_get(obj, "Instance");
-
-   Eo *hv = elm_hover_add(inst->main_box), *bt;
-   evas_object_layer_set(hv, E_LAYER_MENU);
-   elm_hover_parent_set(hv, inst->main_box);
-   elm_hover_target_set(hv, obj);
-   efl_gfx_entity_visible_set(hv, EINA_TRUE);
-   Eo *bx = elm_box_add(hv);
-   elm_box_homogeneous_set(bx, EINA_TRUE);
-   EINA_LIST_FOREACH(dev->images, itr, img)
-     {
-        bt = _button_create(bx, img->name, NULL, NULL, _image_selected, dev);
-        efl_key_data_set(bt, "hover", hv);
-        elm_box_pack_end(bx, bt);
-     }
-   bt = _button_create(bx, "Disabled", NULL, NULL, _image_selected, dev);
-   efl_key_data_set(bt, "hover", hv);
-   elm_box_pack_end(bx, bt);
-
-   evas_object_show(bx);
-   elm_object_part_content_set(hv, "top", bx);
-}
-
-static void
-_box_update(Instance *inst, Eina_Bool clear)
-{
-   Eina_List *itr;
-   Device_Info *dev;
-
-   if (!inst->main_box) return;
-
-   if (clear) elm_box_clear(inst->main_box);
-
-   EINA_LIST_FOREACH(_config->devices, itr, dev)
-     {
-        char lb_text[256];
-        Eo *b = elm_box_add(inst->main_box), *o;
-        elm_box_horizontal_set(b, EINA_TRUE);
-        evas_object_size_hint_align_set(b, EVAS_HINT_FILL, EVAS_HINT_FILL);
-        evas_object_size_hint_weight_set(b, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
-        evas_object_show(b);
-        elm_box_pack_end(inst->main_box, b);
-
-        sprintf(lb_text, "%s (%s) ", dev->name, dev->id);
-        elm_box_pack_end(b, _label_create(b, lb_text, NULL));
-
-        o = _button_create(b, dev->default_image ? dev->default_image : "Disabled",
-              NULL, NULL, _images_bt_clicked, dev);
-        efl_key_data_set(o, "Instance", inst);
-        elm_box_pack_end(b, o);
-     }
 }
 
 static void
@@ -475,6 +416,7 @@ _instance_delete(Instance *inst)
    free(inst);
 }
 
+#if 0
 static void
 _popup_del(Instance *inst)
 {
@@ -494,6 +436,7 @@ _popup_comp_del_cb(void *data, Evas_Object *obj EINA_UNUSED)
 
    E_FREE_FUNC(inst->popup, e_object_del);
 }
+#endif
 
 static void
 _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNUSED, void *event_info)
@@ -503,28 +446,42 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
 
    inst = data;
    ev = event_info;
-   if (ev->button == 1)
+   if (ev->button == 3)
      {
-        if (!inst->popup)
+        Eina_List *itr, *itr2;
+        Device_Info *dev;
+        E_Menu *m, *m2;
+        int x, y;
+
+        m = e_menu_new();
+        EINA_LIST_FOREACH(_config->devices, itr, dev)
           {
-             Evas_Object *o;
-             inst->popup = e_gadcon_popup_new(inst->gcc, 0);
-
-             o = elm_box_add(e_comp->elm);
-             evas_object_size_hint_align_set(o, EVAS_HINT_FILL, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(o, EVAS_HINT_EXPAND, 0.0);
-             evas_object_show(o);
-             efl_wref_add(o, &inst->main_box);
-
-             _box_update(inst, EINA_FALSE);
-
-             e_gadcon_popup_content_set(inst->popup, inst->main_box);
-             e_comp_object_util_autoclose(inst->popup->comp_object,
-                   _popup_comp_del_cb, NULL, inst);
-             e_gadcon_popup_show(inst->popup);
-             e_object_data_set(E_OBJECT(inst->popup), inst);
-             E_OBJECT_DEL_SET(inst->popup, _popup_del_cb);
+             E_Menu_Item *mi, *mi2;
+             Image_Info *img;
+             char lb_text[256];
+             sprintf(lb_text, "%s (%s) -> %s",
+                   dev->name, dev->id, dev->default_image ? dev->default_image : "Disabled");
+             mi = e_menu_item_new(m);
+             e_menu_item_label_set(mi, lb_text);
+             m2 = e_menu_new();
+             e_menu_item_submenu_set(mi, m2);
+             EINA_LIST_FOREACH(dev->images, itr2, img)
+               {
+                  mi2 = e_menu_item_new(m2);
+                  e_menu_item_label_set(mi2, img->name);
+                  e_menu_item_callback_set(mi2, _image_selected, dev);
+               }
+             mi2 = e_menu_item_new(m2);
+             e_menu_item_label_set(mi2, "Disabled");
+             e_menu_item_callback_set(mi2, _image_selected, dev);
           }
+
+        m = e_gadcon_client_util_menu_items_append(inst->gcc, m, 0);
+        e_gadcon_canvas_zone_geometry_get(inst->gcc->gadcon, &x, &y, NULL, NULL);
+        e_menu_activate_mouse(m,
+              e_zone_current_get(),
+              x + ev->output.x, y + ev->output.y, 1, 1,
+              E_MENU_POP_DIRECTION_DOWN, ev->timestamp);
      }
 }
 
