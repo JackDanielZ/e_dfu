@@ -23,9 +23,7 @@
 typedef struct
 {
    E_Gadcon_Client *gcc;
-   E_Gadcon_Popup *popup;
    Evas_Object *o_icon;
-   Eo *main_box;
 
    Ecore_File_Monitor *config_file_monitor;
 } Instance;
@@ -39,7 +37,12 @@ typedef struct
    Eina_Stringshare *name;
    Eina_Stringshare *command;
    Instance *inst;
+
    Ecore_Exe *exe;
+   char *notif_buf;
+   unsigned int notif_id;
+   unsigned int notif_buf_len;
+   unsigned int notif_cur_idx;
 } Image_Info;
 
 typedef struct
@@ -248,25 +251,74 @@ _cmd_end_cb(void *data, int type EINA_UNUSED, void *event)
    Image_Info *img = ecore_exe_data_get(exe);
    if (!img || img->inst != data) return ECORE_CALLBACK_PASS_ON;
    PRINT("EXE END %p\n", img->exe);
-//   _tooltip_enable(d->download_button, EINA_FALSE);
+   free(img->notif_buf);
+   img->notif_buf = NULL;
+   img->notif_buf_len = img->notif_cur_idx = 0;
    return ECORE_CALLBACK_DONE;
+}
+
+static void
+_notification_id_update(void *d, unsigned int id)
+{
+   Image_Info *img = d;
+
+   img->notif_id = id;
+}
+
+static void
+_format_img_notif(Image_Info *img, const char *str)
+{
+   char *cr;
+   unsigned int slen = strlen(str) + 1;
+   if (!img->notif_buf)
+     {
+        img->notif_buf_len = 1024;
+        img->notif_buf = malloc(img->notif_buf_len);
+     }
+   if (img->notif_cur_idx + slen >= img->notif_buf_len)
+     {
+        img->notif_buf_len *= 2;
+        img->notif_buf = realloc(img->notif_buf, img->notif_buf_len);
+     }
+   while ((cr = strchr(str, '\r')) != NULL)
+     {
+        char *last_nl;
+        memcpy(img->notif_buf + img->notif_cur_idx, str, cr - str);
+        str = cr + 1;
+
+        last_nl = strrchr(img->notif_buf, '\n');
+        if (last_nl) img->notif_cur_idx = last_nl - img->notif_buf + 1;
+        else img->notif_cur_idx = 0;
+     }
+   memcpy(img->notif_buf + img->notif_cur_idx, str, strlen(str));
+   img->notif_cur_idx = strlen(img->notif_buf);
 }
 
 static Eina_Bool
 _cmd_output_cb(void *data, int type EINA_UNUSED, void *event)
 {
+   E_Notification_Notify n;
+   char buf_icon[1024];
    Ecore_Exe_Event_Data *event_data = (Ecore_Exe_Event_Data *)event;
    const char *begin = event_data->data;
    Ecore_Exe *exe = event_data->exe;
    Image_Info *img = ecore_exe_data_get(exe);
-   PRINT("EXE OUTPUT In\n");
    if (!img || img->inst != data) return ECORE_CALLBACK_PASS_ON;
-   PRINT("EXE OUTPUT %p\n", img->exe);
 
-   while (*begin == 0xd || *begin == ' ') begin++;
+   snprintf(buf_icon, sizeof(buf_icon), "%s/icon.png", e_module_dir_get(_module));
    PRINT(begin);
-   PRINT("\n");
-//   elm_object_tooltip_text_set(d->download_button, begin);
+
+   _format_img_notif(img, begin);
+
+   memset(&n, 0, sizeof(E_Notification_Notify));
+   n.app_name = "eezier";
+   n.timeout = 3000;
+   n.replaces_id = img->notif_id;
+   n.icon.icon_path = buf_icon;
+   n.summary = img->name;
+   n.body = img->notif_buf;
+   n.urgency = E_NOTIFICATION_NOTIFY_URGENCY_CRITICAL;
+   e_notification_client_send(&n, _notification_id_update, img);
 
    return ECORE_CALLBACK_DONE;
 }
@@ -274,15 +326,11 @@ _cmd_output_cb(void *data, int type EINA_UNUSED, void *event)
 static void
 _dev_cmd_invoke(Image_Info *img)
 {
-//   Instance *inst = img->inst;
-
    if (img->exe) return;
    img->exe = ecore_exe_pipe_run(img->command, ECORE_EXE_PIPE_READ | ECORE_EXE_PIPE_ERROR, img);
    PRINT("EXE %p\n", img->exe);
+
    efl_wref_add(img->exe, &(img->exe));
-//   elm_object_tooltip_text_set(d->download_button, "");
-//   elm_object_tooltip_show(d->download_button);
-//   _tooltip_enable(d->download_button, EINA_TRUE);
 }
 
 static void
@@ -389,7 +437,6 @@ _config_file_changed(void *data,
    if (event != ECORE_FILE_EVENT_MODIFIED) return;
    PRINT("Config updated\n");
    _config_shutdown();
-   E_FREE_FUNC(inst->popup, e_object_del);
    _config_init(inst);
 }
 
@@ -411,32 +458,9 @@ static void
 _instance_delete(Instance *inst)
 {
    if (inst->o_icon) evas_object_del(inst->o_icon);
-   if (inst->main_box) evas_object_del(inst->main_box);
 
    free(inst);
 }
-
-#if 0
-static void
-_popup_del(Instance *inst)
-{
-   E_FREE_FUNC(inst->popup, e_object_del);
-}
-
-static void
-_popup_del_cb(void *obj)
-{
-   _popup_del(e_object_data_get(obj));
-}
-
-static void
-_popup_comp_del_cb(void *data, Evas_Object *obj EINA_UNUSED)
-{
-   Instance *inst = data;
-
-   E_FREE_FUNC(inst->popup, e_object_del);
-}
-#endif
 
 static void
 _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNUSED, void *event_info)
