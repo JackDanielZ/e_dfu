@@ -295,10 +295,11 @@ _format_img_notif(Image_Info *img, const char *str)
 }
 
 static Eina_Bool
-_cmd_output_cb(void *data, int type EINA_UNUSED, void *event)
+_cmd_output_cb(void *data, int type, void *event)
 {
    E_Notification_Notify n;
    char buf_icon[1024];
+   char output_buf[1024];
    Ecore_Exe_Event_Data *event_data = (Ecore_Exe_Event_Data *)event;
    const char *begin = event_data->data;
    Ecore_Exe *exe = event_data->exe;
@@ -308,7 +309,11 @@ _cmd_output_cb(void *data, int type EINA_UNUSED, void *event)
    snprintf(buf_icon, sizeof(buf_icon), "%s/icon.png", e_module_dir_get(_module));
    PRINT(begin);
 
-   _format_img_notif(img, begin);
+   if (type == ECORE_EXE_EVENT_ERROR)
+      sprintf(output_buf, "<color=#F00>%s</color>", begin);
+   else
+      sprintf(output_buf, "<color=#0F0>%s</color>", begin);
+   _format_img_notif(img, output_buf);
 
    memset(&n, 0, sizeof(E_Notification_Notify));
    n.app_name = "eezier";
