@@ -318,7 +318,8 @@ _cmd_output_cb(void *data, int type, void *event)
 
    memset(&n, 0, sizeof(E_Notification_Notify));
    n.app_name = "eezier";
-   n.timeout = 3000;
+   if (type == ECORE_EXE_EVENT_ERROR) n.timeout = 10000;
+   else n.timeout = 3000;
    n.replaces_id = img->notif_id;
    n.icon.icon_path = buf_icon;
    n.summary = img->name;
