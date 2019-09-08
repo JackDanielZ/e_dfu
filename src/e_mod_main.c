@@ -290,7 +290,7 @@ _format_img_notif(Image_Info *img, const char *str)
         if (last_nl) img->notif_cur_idx = last_nl - img->notif_buf + 1;
         else img->notif_cur_idx = 0;
      }
-   memcpy(img->notif_buf + img->notif_cur_idx, str, strlen(str));
+   strcpy(img->notif_buf + img->notif_cur_idx, str);
    img->notif_cur_idx = strlen(img->notif_buf);
 }
 
@@ -307,13 +307,14 @@ _cmd_output_cb(void *data, int type, void *event)
    if (!img || img->inst != data) return ECORE_CALLBACK_PASS_ON;
 
    snprintf(buf_icon, sizeof(buf_icon), "%s/icon.png", e_module_dir_get(_module));
-   PRINT(begin);
 
    if (type == ECORE_EXE_EVENT_ERROR)
-      sprintf(output_buf, "<color=#F00>%s</color>", begin);
+      sprintf(output_buf, "<color=#F00>%.*s</color>", event_data->size, begin);
    else
-      sprintf(output_buf, "<color=#0F0>%s</color>", begin);
+      sprintf(output_buf, "<color=#0F0>%.*s</color>", event_data->size, begin);
    _format_img_notif(img, output_buf);
+
+   PRINT("Text to display:\n%s\n", output_buf);
 
    memset(&n, 0, sizeof(E_Notification_Notify));
    n.app_name = "eezier";
