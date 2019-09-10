@@ -477,7 +477,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
 
    inst = data;
    ev = event_info;
-   if (ev->button == 3)
+   if (ev->button == 1)
      {
         Eina_List *itr, *itr2;
         Device_Info *dev;
@@ -507,6 +507,18 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              e_menu_item_callback_set(mi2, _image_selected, dev);
           }
 
+        e_gadcon_canvas_zone_geometry_get(inst->gcc->gadcon, &x, &y, NULL, NULL);
+        e_menu_activate_mouse(m,
+              e_zone_current_get(),
+              x + ev->output.x, y + ev->output.y, 1, 1,
+              E_MENU_POP_DIRECTION_DOWN, ev->timestamp);
+     }
+   else if (ev->button == 3)
+     {
+        E_Menu *m;
+        int x, y;
+
+        m = e_menu_new();
         m = e_gadcon_client_util_menu_items_append(inst->gcc, m, 0);
         e_gadcon_canvas_zone_geometry_get(inst->gcc->gadcon, &x, &y, NULL, NULL);
         e_menu_activate_mouse(m,
